@@ -194,27 +194,38 @@ def det_curve(y_true, scores):
     return np.array(fprs), np.array(fnrs)
 
 
-def plot_det(fpr, fnr, label, ax, linestyle="-"):
-    """Plot a single DET curve on probit-scaled axes."""
+def plot_det(fpr, fnr, label, ax, linestyle="-", use_probit=False):
+    """Plot a single DET curve."""
     eps = 1e-4
     fpr_c = np.clip(fpr, eps, 1 - eps)
     fnr_c = np.clip(fnr, eps, 1 - eps)
-    ax.plot(norm.ppf(fpr_c), norm.ppf(fnr_c), label=label, linestyle=linestyle)
+    if use_probit:
+        ax.plot(norm.ppf(fpr_c), norm.ppf(fnr_c), label=label, linestyle=linestyle)
+    else:
+        ax.plot(fpr_c, fnr_c, label=label, linestyle=linestyle)
 
 
-def setup_det_axes(ax, title="DET Curve"):
-    ticks = [0.01, 0.02, 0.05, 0.10, 0.20, 0.40, 0.60, 0.80]
-    tick_locs = [norm.ppf(t) for t in ticks]
+def setup_det_axes(ax, title="DET Curve", use_probit=False):
+    """Configure DET axes. use_probit=True: standard probit scale (uneven ticks).
+       use_probit=False: linear scale with evenly spaced tick labels."""
+    if use_probit:
+        ticks = [0.01, 0.02, 0.05, 0.10, 0.20, 0.40, 0.60, 0.80]
+        tick_locs = [norm.ppf(t) for t in ticks]
+    else:
+        ticks = np.linspace(0, 1, 11)  # 0%, 10%, 20%, ..., 100%
+        tick_locs = ticks
     tick_labels = [f"{t*100:.0f}%" for t in ticks]
     ax.set_xticks(tick_locs)
     ax.set_xticklabels(tick_labels)
     ax.set_yticks(tick_locs)
     ax.set_yticklabels(tick_labels)
-    ax.set_xlabel("False Positive Rate")
-    ax.set_ylabel("False Negative Rate")
-    ax.set_title(title)
-    ax.legend(fontsize=8)
-    ax.grid(True, alpha=0.3)
+    ax.set_xlabel("False Positive Rate", fontsize=10)
+    ax.set_ylabel("False Negative Rate", fontsize=10)
+    ax.set_title(title, fontsize=12)
+    ax.legend(fontsize=9)
+    ax.grid(True, alpha=0.3, linestyle=":")
+    ax.set_xlim(-0.02, 1.02)
+    ax.set_ylim(-0.02, 1.02)
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -258,7 +269,11 @@ def run_single(X, y, seed):
     scores_rbf = svm_rbf.decision_function(X_te_s)
     results["Custom SVM (RBF)"] = (compute_metrics(y_te, pred_rbf), scores_rbf, y_te)
 
-    # (c) Sklearn SVM (API) — RBF kernel
+    # (c) Sklearn SVM (API) — linear kernel
+    pred_sk_lin, scores_sk_lin = run_sklearn_svm(X_tr_s, y_tr, X_te_s, y_te, kernel="linear")
+    results["Sklearn SVM (linear)"] = (compute_metrics(y_te, pred_sk_lin), scores_sk_lin, y_te)
+
+    # (d) Sklearn SVM (API) — RBF kernel
     pred_sk, scores_sk = run_sklearn_svm(X_tr_s, y_tr, X_te_s, y_te, kernel="rbf")
     results["Sklearn SVM (RBF)"] = (compute_metrics(y_te, pred_sk), scores_sk, y_te)
 
@@ -300,7 +315,7 @@ def main():
 
     # ── Download & build dataset ──
     print("\n[1] Downloading dataset from PhysioNet ...")
-    download_dataset()
+    # download_dataset()
 
     print("[2] Building feature matrix ...")
     X, y = build_dataset()
@@ -321,13 +336,17 @@ def main():
         print(f"  Running iteration {i+1}/5 (seed={s}) ...")
         clean_results.append(run_single(X, y, seed=s))
 
-    for model in ["Custom SVM (linear)", "Custom SVM (RBF)", "Sklearn SVM (RBF)"]:
+    ALL_MODELS = ["Custom SVM (linear)", "Custom SVM (RBF)",
+                   "Sklearn SVM (linear)", "Sklearn SVM (RBF)"]
+
+    for model in ALL_MODELS:
         print_table(clean_results, model, model)
 
     # DET curve for clean data (using all 5 runs pooled)
     fig, ax = plt.subplots(figsize=(7, 7))
     for model, ls in [("Custom SVM (linear)", "-"),
                       ("Custom SVM (RBF)", "--"),
+                      ("Sklearn SVM (linear)", "-."),
                       ("Sklearn SVM (RBF)", ":")]:
         all_scores = np.concatenate([r[model][1] for r in clean_results])
         all_y = np.concatenate([r[model][2] for r in clean_results])
@@ -353,15 +372,13 @@ def main():
         y_poisoned = poison_labels(y, ratio=0.10, seed=s)
         poisoned_results.append(run_single(X, y_poisoned, seed=s))
 
-    for model in ["Custom SVM (linear)", "Custom SVM (RBF)", "Sklearn SVM (RBF)"]:
+    for model in ALL_MODELS:
         print_table(poisoned_results, model, f"{model} [POISONED 10%]")
 
     # Comparative DET curves: clean vs poisoned
-    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-    for idx, (model, ls) in enumerate([("Custom SVM (linear)", "-"),
-                                        ("Custom SVM (RBF)", "--"),
-                                        ("Sklearn SVM (RBF)", ":")]):
-        ax = axes[idx]
+    fig, axes = plt.subplots(2, 2, figsize=(12, 12))
+    for idx, model in enumerate(ALL_MODELS):
+        ax = axes[idx // 2][idx % 2]
 
         # Clean
         sc_clean = np.concatenate([r[model][1] for r in clean_results])
@@ -392,7 +409,7 @@ def main():
     print("=" * 70)
     print(f"  {'Model':<25s} {'Clean':>10s} {'Poisoned':>10s} {'Δ':>10s}")
     print(f"  {'─'*58}")
-    for model in ["Custom SVM (linear)", "Custom SVM (RBF)", "Sklearn SVM (RBF)"]:
+    for model in ALL_MODELS:
         f1_clean = np.mean([r[model][0][3] for r in clean_results])
         f1_poison = np.mean([r[model][0][3] for r in poisoned_results])
         print(f"  {model:<25s} {f1_clean:>10.4f} {f1_poison:>10.4f} {f1_poison-f1_clean:>+10.4f}")
