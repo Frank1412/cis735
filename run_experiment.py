@@ -1,18 +1,3 @@
-"""
-CIS 735 Assignment — Part II: SVM on Gait Dynamics in Neuro-Degenerative Disease
-
-Task overview:
-  - Custom SVM (no API): linear (no kernel) and RBF kernel
-  - Scikit-learn SVM for comparison
-  - 5 runs  →  table of accuracy, precision, recall, F-score
-  - DET curve for clean data
-  - 10% label-poisoning  →  same table + comparative DET curves
-
-Dataset: https://archive.physionet.org/physiobank/database/gaitndd/
-  Binary classification: Parkinson's disease vs. Healthy control
-  Features extracted from stride-interval time series (.ts files)
-"""
-
 import os
 import urllib.request
 import warnings
@@ -309,13 +294,10 @@ def print_table(all_results, model_name, title):
 # ════════════════════════════════════════════════════════════════════════════
 
 def main():
-    print("=" * 70)
-    print("  CIS 735 — SVM Experiment on Gait Dynamics (Parkinson's vs Control)")
-    print("=" * 70)
 
     # ── Download & build dataset ──
     print("\n[1] Downloading dataset from PhysioNet ...")
-    # download_dataset()
+    download_dataset()
 
     print("[2] Building feature matrix ...")
     X, y = build_dataset()
