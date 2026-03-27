@@ -297,7 +297,7 @@ def main():
 
     # ── Download & build dataset ──
     print("\n[1] Downloading dataset from PhysioNet ...")
-    download_dataset()
+    # download_dataset()
 
     print("[2] Building feature matrix ...")
     X, y = build_dataset()
